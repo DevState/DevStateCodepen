@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>PIE CHART</title>
+
+<script type="text/javascript" src="js/MathUtil.js" ></script>
+<script type="text/javascript" src="js/Geom.js" ></script>
+<script type="text/javascript" src="js/UnitAnimator.js" ></script>
+
+<script type="text/javascript">
+
+var readyStateCheckInterval = setInterval( function() {
+    if (document.readyState === "complete") {
+        clearInterval(readyStateCheckInterval);
+        init();
+    }
+}, 10);
+
+//========================
+//general properties for demo set up
+//========================
+
+var canvas, context, canvasContainer, htmlBounds, bounds;
+var minimumStageWidth = 250;
+var minimumStageHeight = 250;
+var maxStageWidth = 500;
+var maxStageHeight = 500;
+var resizeTimeoutId = -1;
+
+function init(){
+    canvasContainer = document.getElementById("canvasContainer");
+    window.onresize = resizeHandler;
+    commitResize();
+}
+
+function getWidth( element ){return Math.max(element.scrollWidth,element.offsetWidth,element.clientWidth );}
+function getHeight( element ){return Math.max(element.scrollHeight,element.offsetHeight,element.clientHeight );}
+
+//avoid running resize scripts repeatedly if a browser window is being resized by dragging
+function resizeHandler(){
+    context.clearRect(0,0,canvas.width, canvas.height);
+    clearTimeout(resizeTimeoutId);
+    clearTimeoutsAndIntervals();
+    resizeTimeoutId = setTimeout(commitResize, 300 );
+}
+
+function commitResize(){
+    if(canvas){
+        canvasContainer.removeChild(canvas);
+    }
+    canvas = document.createElement('canvas');
+    canvas.style.position = "absolute";
+    context = canvas.getContext("2d");
+    canvasContainer.appendChild(canvas);
+
+    htmlBounds = new Geom.Rectangle(0,0, getWidth(canvasContainer) , getHeight(canvasContainer));
+    if(htmlBounds.width >= maxStageWidth){
+        canvas.width = maxStageWidth;
+        canvas.style.left = htmlBounds.getCenterX() - (maxStageWidth/2)+"px";
+    }else{
+        canvas.width = htmlBounds.width;
+        canvas.style.left ="0px";
+    }
+    if(htmlBounds.height > maxStageHeight){
+        canvas.height = maxStageHeight;
+        canvas.style.top = htmlBounds.getCenterY() - (maxStageHeight/2)+"px";
+    }else{
+        canvas.height = htmlBounds.height;
+        canvas.style.top ="0px";
+    }
+    bounds = new Geom.Rectangle(0,0, canvas.width, canvas.height);
+    context.clearRect(0,0,canvas.width, canvas.height);
+
+    if(bounds.width<minimumStageWidth || bounds.height<minimumStageHeight){
+        stageTooSmallHandler();
+        return;
+    }
+
+    startDemo();
+}
+
+function stageTooSmallHandler(){
+    var warning = "Sorry, bigger screen required :(";
+    context.font = "bold normal 24px sans-serif";
+    context.fillText(warning, bounds.getCenterX() - context.measureText(warning).width/2, bounds.getCenterY()-12);
+}
+
+
+//========================
+//Demo specific properties
+//========================
+
+var animating = false;
+var radius, dataProvider, dataProviderTotal, animator, pieChartOpen, reflectionRect, colors, center;
+
+function clearTimeoutsAndIntervals(){
+    animator.pause();
+}
+
+function startDemo(){
+    createRandomValues();
+    createRandomColors();
+    center = bounds.getCenter();
+    center.y = bounds.height / 3;
+    radius = canvas.width < canvas.height ? (canvas.width / 3) : (canvas.height / 3);
+
+    canvas.addEventListener("click", function(event){canvasClickHandler(event)}, false);//"mousedown"
+    pieChartOpen = true;
+
+    reflectionRect = new Geom.Rectangle(center.x - radius, center.y - radius, radius * 2, radius * 2);
+
+    animator = new UnitAnimator(1000, canvas, updatePieChart, animationComplete);
+    animator.setRandomEasingFunction();
+    animator.start();
+
+}
+
+function createRandomValues(){
+    var numValues = 1 + Math.floor(Math.random()*5);//between 1 and 6
+    dataProviderTotal = 0;
+    dataProvider = [];
+    var value;
+    var pool = 100;
+    while(numValues > 0){
+        value = Math.round( Math.random() * (pool / 2) );
+        dataProvider.push(value);
+        dataProviderTotal += value;
+        pool -= value;
+        numValues--;
+    }
+    dataProvider.push(pool);
+    dataProviderTotal += pool;
+}
+
+function createRandomColors(){
+    colors = [];
+    while(colors.length != dataProvider.length){
+        colors.push(getRandomFillStyleColor());
+    }
+}
+
+function getRandomFillStyleColor(alpha){
+    var c = [];
+    for(var i=0; i<3; i++){
+        c[i] = Math.floor(Math.random()*255);
+    }
+    return "rgba("+c[0]+","+c[1]+","+c[2]+","+(isNaN(alpha) ? 1 : alpha)+")";
+}
+
+
+function render(animationPercent){
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    var startValue = 0;
+    var value;
+    var startRadian, endRadian, gradient;
+    //we do a transform since we need the pie to start from 12 o'clock instead of 3 o'clock (0°)
+    context.save();
+    context.translate(center.x, center.y);
+    context.rotate(-Math.PI / 2);
+    for(var i=0; i < dataProvider.length; i++){
+        value = dataProvider[i] * animationPercent;
+        context.beginPath();
+        context.moveTo(0,0);
+        context.fillStyle = colors[i];
+        startRadian = MathUtil.map(startValue, 0, dataProviderTotal, 0, MathUtil.PI2);
+        endRadian = MathUtil.map(startValue+value, 0, dataProviderTotal, 0, MathUtil.PI2);
+
+        //console.log("\t",startRadian,endRadian);
+        context.arc(0, 0, this.radius, startRadian, endRadian);//x, y, this.radius, from, to
+        context.lineTo(0,0);
+        context.fill();
+        context.closePath();
+
+        gradient = context.createRadialGradient( 0, 0, radius*.85, 0, 0, radius-1);
+        gradient.addColorStop(0, "rgba(0,0,0,0)");
+        gradient.addColorStop(1, "rgba(0,0,0,.3)");
+
+        context.fillStyle = gradient;
+        context.beginPath();
+        context.moveTo(0,0);
+        context.arc(0, 0, radius, startRadian, endRadian);
+        context.lineTo(0,0);
+        context.fill();
+        context.closePath();
+
+        startValue += value;
+    }
+    context.restore();
+    renderReflection();
+}
+
+function animationComplete(){
+
+}
+
+function updatePieChart(){
+    render(animator.getAnimationPercent());
+}
+
+function updatePieChartReverse (){
+    render(1 - animator.getAnimationPercent());
+}
+
+
+function canvasClickHandler(){
+    if(animator.animating){
+        return;
+    }
+    var callback = this.pieChartOpen ? updatePieChartReverse : updatePieChart;
+    pieChartOpen =! pieChartOpen;
+    animator.reset(1000,callback );
+    animator.start();
+}
+
+
+function renderReflection (border){
+    if(!border){
+        border = 5;
+    }
+    context.save();
+    //move and flip vertically
+    context.translate(reflectionRect.x, reflectionRect.y + reflectionRect.height*2 + border);
+    context.scale(1, -1);
+
+    context.drawImage(	canvas, reflectionRect.x, reflectionRect.y, reflectionRect.width, reflectionRect.height,
+            0, 0, reflectionRect.width, reflectionRect.height);//img,sx,sy,swidth,sheight,x,y,width,height
+
+    context.restore();
+
+    var gradient = context.createLinearGradient( reflectionRect.x, reflectionRect.getBottom(), reflectionRect.x, bounds.getBottom() );
+    gradient.addColorStop(0, "rgba(255,255,255,0)");
+    gradient.addColorStop(1, "rgba(255,255,255,1)");
+    context.fillStyle = gradient;
+    context.fillRect(reflectionRect.x, reflectionRect.getBottom(), reflectionRect.width, bounds.getBottom()-reflectionRect.getBottom());
+}
+
+
+</script>
+
+<style type="text/css">
+
+    html, body{
+        margin : 0px;
+        width : 100%;
+        height : 100%;
+        overflow: hidden;
+        background-color: #FFFFFF;
+    }
+
+    #canvasContainer{
+        margin : 0px;
+        width : 100%;
+        height : 100%;
+    }
+
+    #instruction{
+        position: absolute;
+        width: 100%;
+        text-align: center;
+        bottom: 30px;
+    }
+
+</style>
+
+</head>
+<body>
+    <div id="canvasContainer"></div>
+    <span id="instruction">Click pie to open/close. <button type="button" onclick="commitResize()">reset</button> </span>
+</body>
+</html>

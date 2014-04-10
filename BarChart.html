@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BAR CHART</title>
+
+    <script type="text/javascript" src="js/MathUtil.js" ></script>
+    <script type="text/javascript" src="js/Geom.js" ></script>
+    <script type="text/javascript" src="js/UnitAnimator.js" ></script>
+
+    <script type="text/javascript">
+
+var readyStateCheckInterval = setInterval( function() {
+    if (document.readyState === "complete") {
+        clearInterval(readyStateCheckInterval);
+        init();
+    }
+}, 10);
+
+//========================
+//general properties for demo set up
+//========================
+
+var canvas;
+var context;
+var canvasContainer;
+var htmlBounds;
+var bounds;
+var minimumStageWidth = 250;
+var minimumStageHeight = 250;
+var maxStageWidth = 500;
+var maxStageHeight = 500;
+var resizeTimeoutId = -1;
+
+function init(){
+    canvasContainer = document.getElementById("canvasContainer");
+    window.onresize = resizeHandler;
+    commitResize();
+}
+
+function getWidth( element ){return Math.max(element.scrollWidth,element.offsetWidth,element.clientWidth );}
+function getHeight( element ){return Math.max(element.scrollHeight,element.offsetHeight,element.clientHeight );}
+
+//avoid running resize scripts repeatedly if a browser window is being resized by dragging
+function resizeHandler(){
+    context.clearRect(0,0,canvas.width, canvas.height);
+    clearTimeout(resizeTimeoutId);
+    clearTimeoutsAndIntervals();
+    resizeTimeoutId = setTimeout(commitResize, 300 );
+}
+
+function commitResize(){
+    if(canvas){
+        canvasContainer.removeChild(canvas);
+    }
+    canvas = document.createElement('canvas');
+    canvas.style.position = "absolute";
+    context = canvas.getContext("2d");
+    canvasContainer.appendChild(canvas);
+
+    htmlBounds = new Geom.Rectangle(0,0, getWidth(canvasContainer) , getHeight(canvasContainer));
+    if(htmlBounds.width >= maxStageWidth){
+        canvas.width = maxStageWidth;
+        canvas.style.left = htmlBounds.getCenterX() - (maxStageWidth/2)+"px";
+    }else{
+        canvas.width = htmlBounds.width;
+        canvas.style.left ="0px";
+    }
+    if(htmlBounds.height > maxStageHeight){
+        canvas.height = maxStageHeight;
+        canvas.style.top = htmlBounds.getCenterY() - (maxStageHeight/2)+"px";
+    }else{
+        canvas.height = htmlBounds.height;
+        canvas.style.top ="0px";
+    }
+    bounds = new Geom.Rectangle(0,0, canvas.width, canvas.height);
+    context.clearRect(0,0,canvas.width, canvas.height);
+
+    if(bounds.width<minimumStageWidth || bounds.height<minimumStageHeight){
+        stageTooSmallHandler();
+        return;
+    }
+
+    startDemo();
+}
+
+function stageTooSmallHandler(){
+    var warning = "Sorry, bigger screen required :(";
+    context.font = "bold normal 24px sans-serif";
+    context.fillText(warning, bounds.getCenterX() - context.measureText(warning).width/2, bounds.getCenterY()-12);
+}
+
+
+
+
+//========================
+//Demo specific properties
+//========================
+
+var animating = false;
+var extrude = 12;
+var dataProviderMin = 0;
+var bgCanvas, bgContext, dataProvider, dataProviderMax, animator, barChartOpen, reflectionRect, center, barWidth, barSpacer, renderPoint;
+
+function clearTimeoutsAndIntervals(){
+    animator.pause();
+}
+
+function startDemo(){
+    setRandomValues();
+    barWidth = (canvas.width/2) / dataProvider.length;
+    barSpacer = (canvas.width - barWidth * dataProvider.length) / (dataProvider.length+1);
+
+    createBackground ();
+    renderPoint = new Geom.Point();
+
+    canvas.addEventListener("click", canvasClickHandler, false);
+    barChartOpen = true;
+    animator = new UnitAnimator(1500, canvas, updateBarChart);
+    animator.setRandomEasingFunction();
+    animator.start();
+}
+
+
+function setRandomValues(){
+    dataProvider = [];
+    var total = 3 + Math.floor(Math.random()*3);//between 4 and 8
+    while(total > 0){
+        dataProvider.push(10 + Math.floor(Math.random()*90));
+        total--;
+    }
+    dataProviderMax = 100;
+}
+
+function getRandomFillStyleColor(alpha){
+    var c = [];
+    for(var i=0; i<3; i++){
+        c[i] = Math.floor(Math.random()*255);
+    }
+    return "rgba("+c[0]+","+c[1]+","+c[2]+","+(isNaN(alpha) ? 1 : alpha)+")";
+}
+
+
+var numberOfBackgroundLines = 9;
+var darkColor = "#157b0f";
+var lightColor = "#77fd6f";
+
+var false3DExtrusion = 10;
+var legendMargin = 10;
+
+
+function createBackground(){
+    if(!bgCanvas){
+        bgCanvas = document.createElement('canvas');
+    }
+    bgCanvas.width = canvas.width;
+    bgCanvas.height = canvas.height;
+    bgContext = bgCanvas.getContext("2d");
+    legendMargin = extrude + 3;
+
+    if(false3DExtrusion > 0){
+        //bg
+
+        bgContext.fillStyle = this.lightColor;
+
+        //left side extrusion
+        bgContext.beginPath();
+        bgContext.moveTo(false3DExtrusion, 0);
+        bgContext.lineTo(false3DExtrusion, bgCanvas.height);
+        bgContext.lineTo(0, bgCanvas.height);
+        bgContext.lineTo(0, false3DExtrusion);
+        bgContext.lineTo(false3DExtrusion, 0);
+        bgContext.fill();
+        bgContext.closePath();
+
+        //bottom extrusion
+        bgContext.beginPath();
+        bgContext.moveTo(0, bgCanvas.height - false3DExtrusion);
+        bgContext.lineTo(bgCanvas.width, bgCanvas.height - false3DExtrusion);
+        bgContext.lineTo(bgCanvas.width - false3DExtrusion, bgCanvas.height);
+        bgContext.lineTo(0, bgCanvas.height);
+        bgContext.lineTo(0, bgCanvas.height - false3DExtrusion);
+        bgContext.fill();
+        bgContext.closePath();
+    }
+
+    //draw background lines
+    bgContext.strokeStyle = lightColor;
+    bgContext.lineWidth = 1;
+    bgContext.textBaseline = "bottom";
+    var gap = (bgCanvas.height - false3DExtrusion) / (numberOfBackgroundLines+1);
+    var yPos = gap;
+    var roundedYPos;
+    var legendIncrement = (dataProviderMax - dataProviderMin)/(numberOfBackgroundLines+1);
+    var legend = dataProviderMax - legendIncrement;
+    bgContext.fillStyle = darkColor;
+    bgContext.font = "bold 16px sans-serif";
+    for(var i = 0; i < numberOfBackgroundLines; i++){
+        bgContext.beginPath();
+        roundedYPos = Math.round(yPos);
+        bgContext.moveTo(0, roundedYPos);
+        bgContext.lineTo(bgCanvas.width, roundedYPos);
+        bgContext.stroke();
+        bgContext.closePath();
+        yPos += gap;
+        bgContext.fillText(Math.round(legend), this.legendMargin , roundedYPos);
+        legend-=legendIncrement;
+    }
+    bgContext.fillText( Math.round(legend), this.legendMargin , roundedYPos+gap);
+}
+
+
+//move, Line Chart uses the same, maybe move to ChartBackground? Rename ChartBackground to ChartUtil?
+function calculateYPosition(value, animationPercent){
+    return MathUtil.interpolate( MathUtil.normalize(value, 0, dataProviderMax) * animationPercent, bounds.getBottom(), 0)
+}
+
+function render(animationPercent){
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bgCanvas, 0, 0);
+
+    //render bars
+    var gradient;
+    context.strokeStyle = "#FFFFFF";
+    for (var i = 0; i < dataProvider.length; i++) {
+        context.fillStyle = this.lightColor;
+        renderPoint.x = barSpacer + (barSpacer * i) + (barWidth * i);
+        renderPoint.y = calculateYPosition(dataProvider[i], animationPercent);
+
+        //draw top extrusion
+        context.beginPath();
+        context.moveTo(renderPoint.x, renderPoint.y);
+        context.lineTo(renderPoint.x + extrude, renderPoint.y-extrude);
+        context.lineTo(renderPoint.x + extrude+barWidth, renderPoint.y-extrude);
+        context.lineTo(renderPoint.x + barWidth, renderPoint.y);
+        context.lineTo(renderPoint.x, renderPoint.y);
+        context.closePath();
+
+        context.fill();
+        context.stroke();
+
+        //draw side extrusion
+        context.beginPath();
+        context.moveTo(renderPoint.x + barWidth, renderPoint.y);
+        context.lineTo(renderPoint.x + extrude + barWidth, renderPoint.y - extrude);
+        context.lineTo(renderPoint.x + extrude + barWidth, canvas.height - extrude);
+        context.lineTo(renderPoint.x + barWidth, canvas.height);
+        context.lineTo(renderPoint.x + barWidth, renderPoint.y);
+        context.closePath();
+        context.fill();
+        context.stroke();
+
+        gradient = context.createLinearGradient(0, renderPoint.y, 0, canvas.height);// linear gradient from start to end of line
+        gradient.addColorStop(0, lightColor);
+        gradient.addColorStop(1, darkColor);
+
+        context.fillStyle = gradient;
+
+        //draw bar
+        context.fillRect(renderPoint.x, renderPoint.y, barWidth, canvas.height-renderPoint.y);
+        context.strokeRect(renderPoint.x, renderPoint.y, barWidth, canvas.height-renderPoint.y);
+    }
+}
+
+function updateBarChart(){
+    render(animator.getAnimationPercent());
+}
+
+function updateBarChartReverse(){
+    render(1 - animator.getAnimationPercent());
+}
+
+function canvasClickHandler(){
+    if(animator.animating){
+        return;
+    }
+    animator.reset(1500, barChartOpen ? updateBarChartReverse : updateBarChart);
+    animator.setRandomEasingFunction();
+    barChartOpen =! barChartOpen;
+    animator.start();
+}
+
+
+    </script>
+
+    <style type="text/css">
+
+html, body{
+    margin : 0px;
+    width : 100%;
+    height : 100%;
+    overflow: hidden;
+    background-color: #FFFFFF;
+}
+
+#canvasContainer{
+    margin : 0px;
+    width : 100%;
+    height : 100%;
+}
+
+#instruction{
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    bottom: 30px;
+}
+
+    </style>
+
+</head>
+<body>
+    <div id="canvasContainer"></div>
+    <span id="instruction">Click chart to open/close. <button type="button" onclick="commitResize()">reset</button> </span>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DEMO</title>
+
+    <script type="text/javascript" src="js/MathUtil.js" ></script>
+    <script type="text/javascript" src="js/Geom.js" ></script>
+
+    <script type="text/javascript">
+
+window.requestAnimationFrame =
+        window.__requestAnimationFrame ||
+                window.requestAnimationFrame ||
+                window.webkitRequestAnimationFrame ||
+                window.mozRequestAnimationFrame ||
+                window.oRequestAnimationFrame ||
+                window.msRequestAnimationFrame ||
+                (function () {
+                    return function (callback, element) {
+                        var lastTime = element.__lastTime;
+                        if (lastTime === undefined) {
+                            lastTime = 0;
+                        }
+                        var currTime = Date.now();
+                        var timeToCall = Math.max(1, 33 - (currTime - lastTime));
+                        window.setTimeout(callback, timeToCall);
+                        element.__lastTime = currTime + timeToCall;
+                    };
+                })();
+
+var readyStateCheckInterval = setInterval( function() {
+    if (document.readyState === "complete") {
+        clearInterval(readyStateCheckInterval);
+        init();
+    }
+}, 10);
+
+//========================
+//general properties for demo set up
+//========================
+
+var canvas;
+var context;
+var canvasContainer;
+var htmlBounds;
+var bounds;
+var minimumStageWidth = 250;
+var minimumStageHeight = 250;
+var maxStageWidth = 1000;
+var maxStageHeight = 800;
+var resizeTimeoutId = -1;
+
+function init(){
+    canvasContainer = document.getElementById("canvasContainer");
+    window.onresize = resizeHandler;
+    commitResize();
+}
+
+function getWidth( element ){return Math.max(element.scrollWidth,element.offsetWidth,element.clientWidth );}
+function getHeight( element ){return Math.max(element.scrollHeight,element.offsetHeight,element.clientHeight );}
+
+//avoid running resize scripts repeatedly if a browser window is being resized by dragging
+function resizeHandler(){
+    context.clearRect(0,0,canvas.width, canvas.height);
+    clearTimeout(resizeTimeoutId);
+    clearTimeoutsAndIntervals();
+    resizeTimeoutId = setTimeout(commitResize, 300 );
+}
+
+function commitResize(){
+    if(canvas){
+        canvasContainer.removeChild(canvas);
+    }
+    canvas = document.createElement('canvas');
+    canvas.style.position = "absolute";
+    context = canvas.getContext("2d");
+    canvasContainer.appendChild(canvas);
+
+    htmlBounds = new Geom.Rectangle(0,0, getWidth(canvasContainer) , getHeight(canvasContainer));
+    if(htmlBounds.width >= maxStageWidth){
+        canvas.width = maxStageWidth;
+        canvas.style.left = htmlBounds.getCenterX() - (maxStageWidth/2)+"px";
+    }else{
+        canvas.width = htmlBounds.width;
+        canvas.style.left ="0px";
+    }
+    if(htmlBounds.height > maxStageHeight){
+        canvas.height = maxStageHeight;
+        canvas.style.top = htmlBounds.getCenterY() - (maxStageHeight/2)+"px";
+    }else{
+        canvas.height = htmlBounds.height;
+        canvas.style.top ="0px";
+    }
+    bounds = new Geom.Rectangle(0,0, canvas.width, canvas.height);
+    context.clearRect(0,0,canvas.width, canvas.height);
+
+    if(bounds.width<minimumStageWidth || bounds.height<minimumStageHeight){
+        stageTooSmallHandler();
+        return;
+    }
+
+    startDemo();
+}
+
+function stageTooSmallHandler(){
+    var warning = "Sorry, bigger screen required :(";
+    context.font = "bold normal 24px sans-serif";
+    context.fillText(warning, bounds.getCenterX() - context.measureText(warning).width/2, bounds.getCenterY()-12);
+}
+
+
+
+
+//========================
+//Demo specific properties
+//========================
+
+    var animating = false;
+
+    function clearTimeoutsAndIntervals(){
+        animating = false;
+    }
+
+    function startDemo(){
+        animating = true;
+        loop();
+    }
+
+    function loop(){
+        if(animating){
+            window.requestAnimationFrame(loop, canvas);
+            renderStuff();
+        }
+    }
+
+
+
+
+    </script>
+
+    <style type="text/css">
+
+html, body{
+    margin : 0px;
+    width : 100%;
+    height : 100%;
+    overflow: hidden;
+    background-color: #FFFFFF;
+}
+
+#canvasContainer{
+    margin : 0px;
+    width : 100%;
+    height : 100%;
+}
+
+    </style>
+
+</head>
+<body>
+<div id="canvasContainer"></div>
+</body>
+</html>
